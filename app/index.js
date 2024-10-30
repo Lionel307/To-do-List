@@ -1,3 +1,4 @@
+import FontAwesome5 from '@expo/vector-icons/FontAwesome5';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -6,7 +7,7 @@ import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useNavigation } from "expo-router";
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Button, Dimensions, FlatList, Image, SafeAreaView, StyleSheet, Text, TouchableOpacity, Vibration, View } from 'react-native';
+import { Alert, Button, Dimensions, Image, SafeAreaView, SectionList, StyleSheet, Text, TouchableOpacity, Vibration, View } from 'react-native';
 import ConfettiCannon from 'react-native-confetti-cannon';
 import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
 const TASKS_STORE_KEY = "@tasks";
@@ -15,6 +16,7 @@ export default function HomeScreen() {
   const backgroundColor = darkMode ? '#333' : '#fff';
   const textColor = darkMode ? '#fff' : '#000';
   const [todoList, setTodoList] = useState([]);
+  const sortedTodoList = todoList.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
   const swipeableRef = useRef(null);
   const [cameraPermissions, requestCameraPermissions] = ImagePicker.useCameraPermissions();
   const [mediaLibraryPermissions, requestMediaLibraryPermissions] = ImagePicker.useMediaLibraryPermissions();
@@ -120,7 +122,31 @@ export default function HomeScreen() {
       }
     ]);
   };
+
+  const isPastDueDate = (dueDate) => {
+    const currentDate = new Date();
+    return new Date(dueDate) < currentDate;
+  };
+
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0'); 
+    const year = date.getFullYear();
+    return `${day}-${month}-${year}`;
+  };
   
+  const groupedTasks = todoList.reduce((acc, task) => {
+    const formattedDate = formatDate(task.dueDate); // Use formatDate to display date as dd-mm-yyyy
+    if (!acc[formattedDate]) acc[formattedDate] = [];
+    acc[formattedDate].push(task);
+    return acc;
+  }, {});
+  
+  const sections = Object.keys(groupedTasks).map(date => ({
+    title: date,
+    data: groupedTasks[date],
+  }));
 
   const editTask = (item) => {
     navigation.navigate("edit", {
@@ -130,11 +156,12 @@ export default function HomeScreen() {
       imageUri: item.imageUri,
       priority: item.priority,
       completed: item.completed,
+      dueDate: item.dueDate,
     });
     swipeableRef.current?.close();
   };
   
-  const renderTodoItem = ({ item }) => ( 
+  const renderTodoItem = ({ item }) => (
     <Swipeable
       ref={swipeableRef}
       renderRightActions={() => (
@@ -155,12 +182,30 @@ export default function HomeScreen() {
           color={item.completed ? '#007AFF' : undefined}
         />
         <View style={styles.taskContent}>
-          {/* Wrap the priority text in a View for better styling */}
-          <View style={getPriorityTitleStyle(item.priority)}>
-            <Text style={{ color: '#333', fontWeight: '700' }}>
-              {`${item.title} (${item.priority === '1' ? '!!!' : item.priority === '2' ? '!!' : item.priority === '3' ? '!' : 'None'})`}
-            </Text>
+        <View style={getPriorityTitleStyle(item.priority)}>
+          <Text style={{ color: '#333', fontWeight: '700' }}>
+            {item.title}
+          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            {item.priority === '1' && (
+              <>
+                <FontAwesome5 name="exclamation-triangle" size={12} color="#f74040" />
+                <FontAwesome5 name="exclamation-triangle" size={12} color="#f74040" />
+                <FontAwesome5 name="exclamation-triangle" size={12} color="#f74040" />
+              </>
+            )}
+            {item.priority === '2' && (
+              <>
+                <FontAwesome5 name="exclamation-triangle" size={12} color="#ffb061" />
+                <FontAwesome5 name="exclamation-triangle" size={12} color="#ffb061" />
+              </>
+            )}
+            {item.priority === '3' && (
+              <FontAwesome5 name="exclamation-triangle" size={12} color="#5ed15e" />
+            )}
+           
           </View>
+        </View>
           {item.imageUri && (
             <Image source={{ uri: item.imageUri }} style={styles.taskImage} />
           )}
@@ -170,10 +215,11 @@ export default function HomeScreen() {
     </Swipeable>
   );
   
+  
 
   const getPriorityTitleStyle = (priority) => ({
     padding: 10, 
-    borderRadius: 20, 
+    borderRadius: 15, 
     fontWeight: '700',
     backgroundColor: priority === '1' ? '#FF988A' : // Pastel red
                      priority === '2' ? 'rgb(253, 236, 200)' : // Pastel yellow
@@ -186,23 +232,13 @@ export default function HomeScreen() {
 
   const sortTasksByPriority = () => {
     const sortedTasks = [...todoList].sort((a, b) => {
-      if (!a.priority) return 1; // No priority tasks at the bottom
+      if (!a.priority) return 1; 
       if (!b.priority) return -1;
       return a.priority - b.priority; // Higher priority numbers come first
     });
     setTodoList(sortedTasks);
   };
 
-  const onDragEnd = ({ nativeEvent }) => {
-    // Update todoList based on new order
-    if (nativeEvent.oldIndex !== nativeEvent.newIndex) {
-      const updatedList = Array.from(todoList);
-      const [movedItem] = updatedList.splice(nativeEvent.oldIndex, 1);
-      updatedList.splice(nativeEvent.newIndex, 0, movedItem);
-      setTodoList(updatedList);
-    }
-  };
-  
   const { width } = Dimensions.get('window');
   const originX = width / 2; 
   return (
@@ -216,24 +252,24 @@ export default function HomeScreen() {
           explosionSpeed={700}
         />
       )}
-        {todoList.length === 0 ? (
-          <>
-            <View style={styles.emptyListContainer}>
-              <Text style={[styles.emptyText, { color: textColor }]}>You have no tasks</Text>
-            </View>
-          </>
+        {sections.length === 0 ? (
+          <View style={styles.emptyListContainer}>
+            <Text style={[styles.emptyText, { color: textColor }]}>You have no tasks</Text>
+          </View>
         ) : (
           <>
-            <Button title="Sort by Priority" onPress={sortTasksByPriority} />
-            <FlatList
-              data={todoList}
+            <Button title="Sort Priority" onPress={sortTasksByPriority} />
+            <SectionList
+              sections={sections}
               keyExtractor={(item) => item.id}
               renderItem={renderTodoItem}
-              onDragEnd={onDragEnd} // Enable drag and drop
-              onMoveShouldSetResponder={() => true} // Allow dragging
-            ></FlatList>
+              renderSectionHeader={({ section: { title } }) => (
+                <Text style={[styles.sectionHeader, { color: isPastDueDate(title) ? 'red' : 'black'}]}>{title}</Text>
+              )}
+            />
           </>
         )}
+        
          <TouchableOpacity
           style={styles.createButton}
           onPress={() => navigation.navigate("create")}
@@ -265,14 +301,17 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     flex: 1,
   },
-  taskText: {
-    fontSize: 15,
+  taskTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    flexWrap: 'wrap',
+    marginBottom: 4,
   },
   taskDescription: {
     fontSize: 14,
     color: '#888',
-    paddingTop: 10,
-  },
+    flexWrap: 'wrap',
+  },  
   emptyListContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -302,5 +341,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginTop: 5,
   },
+  sectionHeader: {
+    fontSize: 16,
+    fontWeight: '600',
+    borderRadius: 5,
+    marginTop: 10,
+    left: 30,
+    borderBottomWidth: 1,
+  },
+  
 });
 

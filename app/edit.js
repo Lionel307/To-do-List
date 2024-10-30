@@ -1,16 +1,24 @@
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
-import { useNavigation, useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useNavigation } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { Button, Image, StyleSheet, TextInput, View, Text, Alert } from "react-native";
+import { Alert, Button, Image, StyleSheet, Text, TextInput, View } from "react-native";
 import DropDownPicker from 'react-native-dropdown-picker';
 
 export default function EditScreen() {
-  const { id, title, description, imageUri, priority, completed } = useLocalSearchParams();
+  const { id, title, description, imageUri, priority, completed, dueDate } = useLocalSearchParams();
   const [taskTitle, setTaskTitle] = useState(title || '');
   const [taskDescription, setTaskDescription] = useState(description || '');
   const [taskImage, setTaskImage] = useState(imageUri === "null" ? null : imageUri);
   const [taskPriority, setTaskPriority] = useState(priority || null);
   const [priorityOpen, setPriorityOpen] = useState(false);
+
+  const parseDueDate = (dueDateString) => {
+    const [year, month, day] = dueDateString.split('-').map(Number);
+    return new Date(year, month - 1, day);
+  };
+  const [taskDueDate, setTaskDueDate] = useState(parseDueDate(dueDate) || new Date());
 
   const navigation = useNavigation();
 
@@ -52,6 +60,14 @@ export default function EditScreen() {
     }
   };
 
+  const onDateChange = (event, selectedDate) => {
+    if (selectedDate) {
+      const adjustedDate = new Date(selectedDate);
+      adjustedDate.setHours(12, 0, 0, 0); // Set to noon to avoid time zone issues
+      setTaskDueDate(adjustedDate);
+    }
+  };
+
   const saveChanges = () => {
     if (taskTitle.trim() === '') {
       Alert.alert('Title Required', 'Please enter a title for the task.');
@@ -64,14 +80,14 @@ export default function EditScreen() {
       description: taskDescription,
       imageUri: taskImage,
       priority: taskPriority,
-      completed: completed
+      completed: completed,
+      dueDate: taskDueDate.toISOString().split('T')[0]
     };
-    
     navigation.navigate("index", { updatedTask: JSON.stringify(updatedTask) });
   };
 
   return (
-    <View style={{ marginTop: 20, padding: 10 }}>
+    <View style={styles.container}>
       <Text style={styles.required}>Task name is required*</Text>
 
       <View style={styles.inputContainer}>
@@ -92,42 +108,58 @@ export default function EditScreen() {
           placeholderTextColor="#aaa"
         />
       </View>
-
-      <View style={[styles.dropdownWrapper, priorityOpen && styles.dropdownOpen]}>
-        <DropDownPicker
-          open={priorityOpen}
-          value={taskPriority}
-          items={[
-            { label: "None", value: null },
-            { label: "High", value: "1" },
-            { label: "Medium", value: "2" },
-            { label: "Low", value: "3" },
-          ]}
-          setOpen={setPriorityOpen}
-          setValue={setTaskPriority}
-          placeholder="Select Priority"
-          placeholderStyle={styles.dropdownPlaceholder}
-          style={styles.dropdown}
-          dropDownContainerStyle={styles.dropdownContainer}
-          listItemContainerStyle={styles.dropdownListItem}
-          listItemLabelStyle={styles.dropdownListItemLabel}
-          textStyle={styles.dropdownText}
-        />
+      <View style={styles.thirdRow}>
+        <View style={[styles.dropdownWrapper, priorityOpen && styles.dropdownOpen]}>
+          <DropDownPicker
+            open={priorityOpen}
+            value={taskPriority}
+            items={[
+              { label: "None", value: null },
+              { label: "High", value: "1" },
+              { label: "Medium", value: "2" },
+              { label: "Low", value: "3" },
+            ]}
+            setOpen={setPriorityOpen}
+            setValue={setTaskPriority}
+            placeholder="Select Priority"
+            placeholderStyle={styles.dropdownPlaceholder}
+            style={styles.dropdown}
+            dropDownContainerStyle={styles.dropdownContainer}
+            listItemContainerStyle={styles.dropdownListItem}
+            listItemLabelStyle={styles.dropdownListItemLabel}
+            textStyle={styles.dropdownText}
+          />
+        </View>
+        <View style={styles.dueDateContainer}>
+          <Text style={styles.dueLabel}>Due:</Text>
+          <DateTimePicker
+            value={taskDueDate}
+            mode="date"
+            display="default"
+            onChange={onDateChange}
+          />
+        </View>
       </View>
-
       {taskImage && <Image source={{ uri: taskImage }} style={styles.previewImage} />}
-      <Button title="Pick an image" onPress={pickImage} />
-      <Button title="Take a photo" onPress={takePhoto} />
-      {taskImage && (
-        <Button title="Remove Photo" onPress={() => setTaskImage(null)} color="red" />
-      )}
-      <Button title="Save Changes" onPress={saveChanges} color="#007AFF" />
-      <Button title="Cancel" onPress={() => navigation.goBack()} color="red" />
+      <View style={styles.buttonRow}>
+        <MaterialIcons name="add-photo-alternate" size={40} color="#4A90E2" onPress={pickImage}/>
+        {taskImage && (
+          <MaterialIcons name="no-photography" size={40} color="#f54336" onPress={() => setTaskImage(null)}/>
+        )}
+        <MaterialIcons name="add-a-photo" size={40} color="#4A90E2" onPress={takePhoto}/>
+      </View>
+      <Button title="Save Task" onPress={saveChanges} color="#4CAF50" style={styles.saveButton} />
+      <Button title="Cancel" onPress={() => navigation.goBack()} color="#f54336" style={styles.cancelButton} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    marginTop: 20,
+    padding: 10,
+    zIndex: 1
+  },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -162,7 +194,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 10,
-    zIndex: 1
+    zIndex: 2
   },
   dropdownOpen: {
     zIndex: 1000, 
@@ -179,10 +211,12 @@ const styles = StyleSheet.create({
   },
   dropdownListItemLabel: {
     color: '#333',
+    zIndex: 1000,
     fontSize: 14,
   },
   dropdownPlaceholder: {
     color: '#888',
+    zIndex: 1000,
     fontSize: 14,
   },
   dropdownText: {
@@ -194,5 +228,43 @@ const styles = StyleSheet.create({
     height: 250,
     marginTop: 10,
     alignSelf: 'center',
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginVertical: 10,
+    zIndex: 1,
+  },
+  saveButton: {
+    marginTop: 10,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: '#4CAF50',
+  },
+  cancelButton: {
+    marginTop: 10,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: '#FF5722',
+  },
+  thirdRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    zIndex: 10000,
+  },
+  dueDateContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    backgroundColor: '#f4f4f8',
+  },
+  dueLabel: {
+    fontSize: 16,
+    color: '#333',
+    fontWeight: '600',
+    marginRight: 1,
   },
 });
